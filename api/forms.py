@@ -1,8 +1,9 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
+from django.utils import timezone
 
-from .models import ItemCarro, Maquinaria
+from .models import ItemCarro, Maquinaria, UnidadFlota
 
 
 class RegisterForm(UserCreationForm):
@@ -32,6 +33,14 @@ class MaquinariaForm(forms.ModelForm):
         for field in self.fields.values():
             field.widget.attrs['class'] = 'form-check-input' if isinstance(field.widget, forms.CheckboxInput) else 'form-control'
 
+    def clean_cantidad(self):
+        cantidad = self.cleaned_data['cantidad']
+        if self.instance.pk:
+            asignadas = self.instance.unidades.filter(items_contrato__isnull=False).distinct().count()
+            if cantidad < asignadas:
+                raise forms.ValidationError(f'No puedes reducir la flota bajo {asignadas}: esas unidades tienen historial.')
+        return cantidad
+
 
 class AgregarCarroForm(forms.ModelForm):
     class Meta:
@@ -55,6 +64,14 @@ class ItemCarroForm(forms.ModelForm):
         inicio, fin = datos.get('fecha_inicio'), datos.get('fecha_fin')
         if not inicio or not fin:
             raise forms.ValidationError('Debes indicar ambas fechas antes de continuar.')
-        if fin <= inicio:
+        if inicio and inicio <= timezone.localdate():
+            self.add_error('fecha_inicio', 'El arriendo debe comenzar desde mañana.')
+        if inicio and fin and fin <= inicio:
             self.add_error('fecha_fin', 'La fecha de término debe ser posterior al inicio.')
         return datos
+
+
+class UnidadFlotaForm(forms.ModelForm):
+    class Meta:
+        model = UnidadFlota
+        fields = ('estado', 'permiso_circulacion')

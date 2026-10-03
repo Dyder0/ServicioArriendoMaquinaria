@@ -21,6 +21,11 @@ MAQUINARIAS = [
 def populate():
     for datos in MAQUINARIAS:
         maquinaria, creada = Maquinaria.objects.update_or_create(nombre=datos['nombre'], defaults=datos)
+        if maquinaria.categoria == 'Excavación':
+            # Las excavadoras de ejemplo alternan unidades con y sin permiso de circulación.
+            for indice, unidad in enumerate(maquinaria.unidades.all(), start=1):
+                unidad.permiso_circulacion = indice % 2 == 1
+                unidad.save(update_fields=('permiso_circulacion',))
         print(f'{maquinaria.nombre}: {"creada" if creada else "actualizada"}')
 
 

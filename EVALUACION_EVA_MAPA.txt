@@ -29,7 +29,7 @@ ESTADO: CUMPLE
 ARCHIVO: api/models.py
 CLASE / FUNCIÓN / BLOQUE: PerfilUsuario, Maquinaria, CarroArriendo, ItemCarro, Contrato, ItemContrato
 LÍNEAS: 17-205
-QUÉ HACE: Define seis modelos de negocio con OneToOne y ForeignKey, además de CASCADE, PROTECT y SET_NULL.
+QUÉ HACE: Define modelos de negocio con OneToOne, ForeignKey y unidades físicas de flota, además de CASCADE, PROTECT y SET_NULL.
 POR QUÉ CUMPLE LA EVA: Hay relaciones 1:1 Usuario-Carro/Perfil y 1:N Carro-Items, Contrato-Items y Maquinaria-Items.
 CÓMO MOSTRARLO EN LA DEFENSA: Mostrar OneToOneField en líneas 22 y 77, y ForeignKey en 99-100, 167 y 186-188.
 PENDIENTE: Ninguno.
@@ -474,7 +474,7 @@ ARCHIVO: api/tests.py
 CLASE / FUNCIÓN / BLOQUE: PrecioYContratoTests, APITests y WebTests
 LÍNEAS: 12-163
 QUÉ HACE: Prueba precio, fechas, checkout, sobre-reserva, liberación, JWT/rol, filtros, permisos, carro, estados, panel y footer.
-POR QUÉ CUMPLE LA EVA: Se ejecutaron 14 tests correctamente contra la configuración PostgreSQL.
+POR QUÉ CUMPLE LA EVA: Se ejecutaron 23 tests correctamente contra la configuración PostgreSQL.
 CÓMO MOSTRARLO EN LA DEFENSA: Ejecutar `python manage.py test`.
 PENDIENTE: Mejorable con tests explícitos para refresh, CRUD exitoso completo, DELETE del carro y transición inválida.
 

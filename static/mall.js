@@ -23,13 +23,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // Limita el selector visual y mantiene fin posterior a inicio.
   // La validación definitiva se repite siempre en Django.
   // ========================================================
-  const today = new Date().toISOString().slice(0, 10);
+  const tomorrowDate = new Date();
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrow = `${tomorrowDate.getFullYear()}-${String(tomorrowDate.getMonth() + 1).padStart(2, '0')}-${String(tomorrowDate.getDate()).padStart(2, '0')}`;
   document.querySelectorAll('input[name="fecha_inicio"]').forEach(start => {
     const form = start.closest('form');
     const end = form?.querySelector('input[name="fecha_fin"]');
-    start.min = today;
+    start.min = tomorrow;
     if (end) {
-      end.min = today;
+      end.min = tomorrow;
       start.addEventListener('change', () => {
         const next = new Date(`${start.value}T12:00:00`);
         next.setDate(next.getDate() + 1);

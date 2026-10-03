@@ -32,6 +32,7 @@ urlpatterns = [
     path('panel/maquinarias/nueva/', client_views.maquinaria_form_view, name='maquinaria_crear_web'),
     path('panel/maquinarias/<int:pk>/editar/', client_views.maquinaria_form_view, name='maquinaria_editar_web'),
     path('panel/maquinarias/<int:pk>/eliminar/', client_views.maquinaria_eliminar_view, name='maquinaria_eliminar_web'),
+    path('panel/unidades/<int:pk>/actualizar/', client_views.unidad_flota_actualizar_view, name='unidad_flota_actualizar_web'),
     path('panel/contratos/<int:pk>/estado/', client_views.contrato_estado_view, name='contrato_estado_web'),
 
     path('api/', include(router.urls)),

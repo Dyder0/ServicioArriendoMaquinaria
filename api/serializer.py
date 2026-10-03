@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.utils import timezone
 
-from .models import CarroArriendo, Contrato, ItemCarro, ItemContrato, Maquinaria
+from .models import CarroArriendo, Contrato, ItemCarro, ItemContrato, Maquinaria, UnidadFlota
 
 
 # ==========================================================
@@ -34,8 +35,15 @@ class TokenConRolSerializer(TokenObtainPairSerializer):
 # Si la petición incluye fecha_inicio/fecha_fin, el catálogo
 # informa unidades libres para ese rango sin reservarlas.
 # ==========================================================
+class UnidadFlotaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UnidadFlota
+        fields = ('id', 'codigo', 'estado', 'permiso_circulacion')
+
+
 class MaquinariaSerializer(serializers.ModelSerializer):
     disponibilidad = serializers.SerializerMethodField()
+    unidades = UnidadFlotaSerializer(many=True, read_only=True)
 
     class Meta:
         model = Maquinaria
@@ -57,6 +65,13 @@ class MaquinariaSerializer(serializers.ModelSerializer):
             return maquinaria.disponibilidad(inicio, fin)
         except serializers.ValidationError:
             return maquinaria.cantidad
+
+    def validate_cantidad(self, cantidad):
+        if self.instance:
+            asignadas = self.instance.unidades.filter(items_contrato__isnull=False).distinct().count()
+            if cantidad < asignadas:
+                raise serializers.ValidationError(f'No puede ser menor que las {asignadas} unidades con historial.')
+        return cantidad
 
 
 # ==========================================================
@@ -87,6 +102,8 @@ class ItemCarroSerializer(serializers.ModelSerializer):
         fin = datos.get('fecha_fin', getattr(self.instance, 'fecha_fin', None))
         if inicio and fin and fin <= inicio:
             raise serializers.ValidationError({'fecha_fin': 'Debe ser posterior a fecha_inicio.'})
+        if inicio and inicio <= timezone.localdate():
+            raise serializers.ValidationError({'fecha_inicio': 'El arriendo debe comenzar desde mañana.'})
         if bool(inicio) != bool(fin):
             raise serializers.ValidationError('Debes indicar ambas fechas o dejar ambas vacías.')
         maquinaria = datos.get('maquinaria', getattr(self.instance, 'maquinaria', None))
@@ -107,6 +124,8 @@ class CarroSerializer(serializers.ModelSerializer):
 
 
 class ItemContratoSerializer(serializers.ModelSerializer):
+    unidades_asignadas = UnidadFlotaSerializer(many=True, read_only=True)
+
     class Meta:
         model = ItemContrato
         fields = '__all__'

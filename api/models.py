@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import timedelta
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -7,6 +8,16 @@ from django.db import models
 from django.db.models import Q, Sum
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils import timezone
+
+
+# Una entrega bloquea también el día siguiente para revisión y mantención.
+MARGEN_ENTRE_ARRIENDOS_DIAS = 1
+
+
+def fin_bloqueo(fecha_fin):
+    """Devuelve el primer día en que el equipo puede volver a arrendarse."""
+    return fecha_fin + timedelta(days=MARGEN_ENTRE_ARRIENDOS_DIAS + 1)
 
 
 # ==========================================================
@@ -54,18 +65,62 @@ class Maquinaria(models.Model):
 
     def unidades_reservadas(self, fecha_inicio, fecha_fin, excluir_contrato=None):
         """Suma reservas que se cruzan con [inicio, fin); pendientes no bloquean flota."""
-        # El cruce usa intervalos semiabiertos: inicio < otro_fin y fin > otro_inicio.
+        # Se extiende cada período hasta después del día de mantención posterior a la entrega.
+        fin_solicitado_bloqueado = fin_bloqueo(fecha_fin)
+        desplazamiento = timedelta(days=MARGEN_ENTRE_ARRIENDOS_DIAS + 1)
         consulta = self.items_contrato.filter(
             contrato__estado__in=(Contrato.PAGADO, Contrato.ENTREGADO),
-            fecha_inicio__lt=fecha_fin,
-            fecha_fin__gt=fecha_inicio,
+            fecha_inicio__lt=fin_solicitado_bloqueado,
+            fecha_fin__gt=fecha_inicio - desplazamiento,
         )
         if excluir_contrato:
             consulta = consulta.exclude(contrato_id=excluir_contrato)
         return consulta.aggregate(total=Sum('cantidad'))['total'] or 0
 
     def disponibilidad(self, fecha_inicio, fecha_fin, excluir_contrato=None):
-        return max(0, self.cantidad - self.unidades_reservadas(fecha_inicio, fecha_fin, excluir_contrato))
+        no_operativas = self.unidades.exclude(estado=UnidadFlota.DISPONIBLE).count()
+        return max(0, self.cantidad - no_operativas - self.unidades_reservadas(fecha_inicio, fecha_fin, excluir_contrato))
+
+    @property
+    def unidades_reservadas_activas(self):
+        """Unidades físicas asignadas actualmente a contratos PAGADO/ENTREGADO."""
+        return self.unidades.filter(
+            items_contrato__contrato__estado__in=(Contrato.PAGADO, Contrato.ENTREGADO)
+        ).distinct().count()
+
+    @property
+    def disponibles_sin_reserva(self):
+        """Flota operativa sin ninguna asignación activa, independiente del período."""
+        return self.unidades.filter(estado=UnidadFlota.DISPONIBLE).exclude(
+            items_contrato__contrato__estado__in=(Contrato.PAGADO, Contrato.ENTREGADO)
+        ).distinct().count()
+
+
+# ==========================================================
+# UNIDADES FÍSICAS DE LA FLOTA
+# Cada maquinaria posee equipos identificables. Su estado actual
+# bloquea mantención/revisión y el permiso se gestiona por unidad.
+# ==========================================================
+class UnidadFlota(models.Model):
+    DISPONIBLE = 'DISPONIBLE'
+    MANTENIMIENTO = 'MANTENIMIENTO'
+    REVISION = 'REVISION'
+    ESTADOS = [
+        (DISPONIBLE, 'Disponible'),
+        (MANTENIMIENTO, 'Mantenimiento'),
+        (REVISION, 'Revisión'),
+    ]
+
+    maquinaria = models.ForeignKey(Maquinaria, on_delete=models.CASCADE, related_name='unidades')
+    codigo = models.CharField(max_length=30, unique=True)
+    estado = models.CharField(max_length=20, choices=ESTADOS, default=DISPONIBLE, db_index=True)
+    permiso_circulacion = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ('codigo',)
+
+    def __str__(self):
+        return f'{self.codigo} · {self.maquinaria.nombre}'
 
 
 # ==========================================================
@@ -110,6 +165,8 @@ class ItemCarro(models.Model):
         ]
 
     def clean(self):
+        if self.fecha_inicio and self.fecha_inicio <= timezone.localdate():
+            raise ValidationError({'fecha_inicio': 'El arriendo debe comenzar desde mañana.'})
         if self.fecha_inicio and self.fecha_fin and self.fecha_fin <= self.fecha_inicio:
             raise ValidationError({'fecha_fin': 'La fecha de término debe ser posterior a la fecha de inicio.'})
 
@@ -187,6 +244,7 @@ class ItemContrato(models.Model):
     maquinaria = models.ForeignKey(
         Maquinaria, on_delete=models.SET_NULL, null=True, blank=True, related_name='items_contrato'
     )
+    unidades_asignadas = models.ManyToManyField(UnidadFlota, blank=True, related_name='items_contrato')
     maquinaria_nombre = models.CharField(max_length=140)
     cantidad = models.PositiveIntegerField()
     fecha_inicio = models.DateField()
@@ -215,3 +273,17 @@ def crear_perfil_usuario(sender, instance, created, **kwargs):
     if created:
         rol = PerfilUsuario.EJECUTIVO if instance.is_staff else PerfilUsuario.EMPRESA
         PerfilUsuario.objects.create(usuario=instance, rol=rol)
+
+
+@receiver(post_save, sender=Maquinaria)
+def sincronizar_unidades_flota(sender, instance, **kwargs):
+    """Crea o retira IDs sin historial para mantener la cantidad declarada."""
+    for numero in range(1, instance.cantidad + 1):
+        UnidadFlota.objects.get_or_create(
+            maquinaria=instance,
+            codigo=f'MQ-{instance.pk:03d}-{numero:02d}',
+        )
+    sobrantes = instance.unidades.filter(items_contrato__isnull=True).order_by('-codigo')
+    exceso = instance.unidades.count() - instance.cantidad
+    if exceso > 0:
+        UnidadFlota.objects.filter(pk__in=list(sobrantes.values_list('pk', flat=True)[:exceso])).delete()

@@ -1,15 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}Carro de arriendo · MaquiRent{% endblock %}
 {% block content %}
-<section class="content-head"><p class="eyebrow">TU SOLICITUD</p><h1>Carro de arriendo</h1><p>Define aquí el período de cada equipo. Las unidades se reservan únicamente al confirmar el pago.</p></section>
+<section class="content-head"><p class="eyebrow">TU SOLICITUD</p><h1>Carro de arriendo</h1><p>Define aquí el período de cada equipo. Las unidades se reservan únicamente al confirmar el pago y requieren un día completo de mantención después de la entrega.</p></section>
 <div class="cart-layout"><div>
-{% for item in carro.items.all %}
+{% for item in items_carro %}
 <article class="cart-row cart-edit-item" data-daily="{{ item.maquinaria.tarifa_diaria }}" data-weekly="{{ item.maquinaria.tarifa_semanal }}" data-guarantee="{{ item.maquinaria.garantia }}" data-current-subtotal="{{ item.subtotal }}">
   <div class="cart-machine"><span class="tag">{{ item.maquinaria.categoria }}</span><h3>{{ item.maquinaria.nombre }}</h3><p>{{ item.maquinaria.descripcion|truncatechars:100 }}</p>
     <form class="cart-edit-form" method="post" action="{% url 'actualizar_item_carro_web' item.id %}">{% csrf_token %}
       <label>Cantidad<input type="number" name="cantidad" value="{{ item.cantidad }}" min="1" max="{{ item.maquinaria.cantidad }}" required></label>
-      <label>Fecha de inicio<input type="date" name="fecha_inicio" value="{{ item.fecha_inicio|date:'Y-m-d' }}" required></label>
-      <label>Fecha de término<input type="date" name="fecha_fin" value="{{ item.fecha_fin|date:'Y-m-d' }}" required></label>
+      <label>Fecha de inicio<input type="date" name="fecha_inicio" value="{{ item.fecha_inicio|date:'Y-m-d' }}" min="{{ fecha_minima|date:'Y-m-d' }}" required></label>
+      <label>Fecha de término<input type="date" name="fecha_fin" value="{{ item.fecha_fin|date:'Y-m-d' }}" min="{{ fecha_minima|date:'Y-m-d' }}" required></label>
       <button type="submit">Guardar cambios</button>
     </form>
     <div class="price-breakdown {% if not item.fechas_validas %}invalid-dates{% endif %}">
@@ -17,6 +17,22 @@
       <span><b class="preview-days">{{ item.dias }}</b> días: <b class="preview-weeks">{{ item.semanas }}</b> semana(s) a ${{ item.maquinaria.tarifa_semanal }} + <b class="preview-rest-days">{{ item.dias_restantes }}</b> día(s) a ${{ item.maquinaria.tarifa_diaria }}</span>
       <span>Arriendo: $<b class="preview-rental">{{ item.subtotal_arriendo }}</b> · Garantía: ${{ item.garantia_total }}</span>
       {% else %}<span class="preview-message">Selecciona y guarda fechas válidas para calcular el arriendo.</span>{% endif %}
+    </div>
+    <div class="cart-availability" id="disponibilidad-{{ item.id }}">
+      <div class="cart-calendar-heading"><strong>Disponibilidad · {{ calendario_mes|date:'F Y'|capfirst }}</strong><nav><a href="?mes={{ mes_anterior }}#disponibilidad-{{ item.id }}" aria-label="Mes anterior">←</a><a href="?mes={{ mes_siguiente }}#disponibilidad-{{ item.id }}" aria-label="Mes siguiente">→</a></nav></div>
+      <div class="calendar-scroll"><table class="calendar-table availability-table">
+        <thead><tr><th>Lun</th><th>Mar</th><th>Mié</th><th>Jue</th><th>Vie</th><th>Sáb</th><th>Dom</th></tr></thead>
+        <tbody>{% for semana in item.calendario_semanas %}<tr>{% for dia in semana %}<td class="calendar-day {% if not dia.es_mes %}outside{% endif %} {% if dia.es_hoy %}today{% endif %} {% if dia.no_disponible %}unavailable{% endif %}">
+          <span class="day-number">{{ dia.fecha.day }}</span>
+          {% if dia.es_mes %}
+            {% if dia.arrendadas %}<span class="calendar-event event-reservado">Reservado {{ dia.arrendadas }}u.</span>{% endif %}
+            {% if dia.entregas %}<span class="calendar-event event-entrega">Entrega {{ dia.entregas }}u.</span>{% endif %}
+            {% if dia.mantenimiento %}<span class="calendar-event event-mantenimiento">Mantención {{ dia.mantenimiento }}u.</span>{% endif %}
+            {% if dia.no_disponible %}<span class="availability-label blocked">No disponible</span>{% else %}<span class="availability-label">{{ dia.libres }} libres</span>{% endif %}
+          {% endif %}
+        </td>{% endfor %}</tr>{% endfor %}</tbody>
+      </table></div>
+      <small>La entrega y el día siguiente de mantención también bloquean la unidad.</small>
     </div>
   </div>
   <div class="cart-price"><strong>$<span class="preview-subtotal">{{ item.subtotal }}</span></strong><small>Subtotal</small><form method="post" action="{% url 'eliminar_item_carro_web' item.id %}">{% csrf_token %}<button class="danger-link" type="submit">Eliminar</button></form></div>

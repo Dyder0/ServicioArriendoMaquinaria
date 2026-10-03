@@ -16,7 +16,7 @@ PRIORIDAD MEDIA
 PRIORIDAD BAJA
 
 - Requisito: Cobertura de pruebas.
-  Problema: los 14 tests pasan, pero no cubren de forma explícita refresh JWT, CRUD exitoso completo, DELETE API del carro ni transición inválida.
+  Problema: los 23 tests pasan, pero no cubren de forma explícita refresh JWT, CRUD exitoso completo, DELETE API del carro ni transición inválida.
   Archivo relacionado: api/tests.py.
   Solución necesaria: agregar casos focalizados si se desea evidencia automatizada adicional para la defensa.
 

@@ -1,7 +1,67 @@
 {% extends 'base.html' %}
 {% block title %}Panel ejecutivo · MaquiRent{% endblock %}
 {% block content %}
-<section class="content-head panel-heading"><div><p class="eyebrow">GESTIÓN OPERACIONAL</p><h1>Panel ejecutivo</h1></div><a class="primary-button" href="{% url 'maquinaria_crear_web' %}">+ Nueva maquinaria</a></section>
-<section class="panel-section"><h2>Flota</h2><div class="table-wrap"><table><thead><tr><th>Maquinaria</th><th>Categoría</th><th>Tarifas</th><th>Flota</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{% for maquinaria in maquinarias %}<tr><td><strong>{{ maquinaria.nombre }}</strong></td><td>{{ maquinaria.categoria }}</td><td>${{ maquinaria.tarifa_diaria }} / día<br>${{ maquinaria.tarifa_semanal }} / semana</td><td>{{ maquinaria.cantidad }}</td><td>{% if maquinaria.activo %}<span class="status status-completado">Activa</span>{% else %}<span class="status status-cancelado">Inactiva</span>{% endif %}</td><td><a href="{% url 'maquinaria_editar_web' maquinaria.id %}">Editar</a><form class="inline-form" method="post" action="{% url 'maquinaria_eliminar_web' maquinaria.id %}" onsubmit="return confirm('¿Eliminar esta maquinaria?')">{% csrf_token %}<button class="danger-link">Eliminar</button></form></td></tr>{% empty %}<tr><td colspan="6">No hay maquinaria registrada.</td></tr>{% endfor %}</tbody></table></div></section>
-<section class="panel-section"><h2>Contratos</h2><div class="table-wrap"><table><thead><tr><th>#</th><th>Empresa</th><th>Equipos</th><th>Total</th><th>Estado</th><th>Cambiar estado</th></tr></thead><tbody>{% for contrato in contratos %}<tr><td>{{ contrato.id }}</td><td>{{ contrato.usuario.get_full_name|default:contrato.usuario.username }}</td><td>{% for item in contrato.items.all %}{{ item.cantidad }}× {{ item.maquinaria_nombre }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td><td>${{ contrato.total }}</td><td><span class="status status-{{ contrato.estado|lower }}">{{ contrato.get_estado_display }}</span></td><td>{% if contrato.estado != 'COMPLETADO' and contrato.estado != 'CANCELADO' %}<form class="state-form" method="post" action="{% url 'contrato_estado_web' contrato.id %}">{% csrf_token %}<select name="estado">{% if contrato.estado == 'PENDIENTE' %}<option value="PAGADO">Pagado</option>{% elif contrato.estado == 'PAGADO' %}<option value="ENTREGADO">Entregado</option>{% elif contrato.estado == 'ENTREGADO' %}<option value="COMPLETADO">Completado</option>{% endif %}<option value="CANCELADO">Cancelado</option></select><button>Actualizar</button></form>{% else %}—{% endif %}</td></tr>{% empty %}<tr><td colspan="6">No hay contratos.</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="content-head panel-heading">
+  <div><p class="eyebrow">GESTIÓN OPERACIONAL</p><h1>Panel ejecutivo</h1></div>
+  <a class="primary-button" href="{% url 'maquinaria_crear_web' %}">+ Nueva maquinaria</a>
+</section>
+
+<section class="panel-section" id="flota">
+  <div class="panel-section-title"><div><h2>Flota</h2><p>Ocupación correspondiente al {{ hoy|date:'d/m/Y' }}.</p></div></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Maquinaria</th><th>Categoría</th><th>Tarifas</th><th>Total</th><th>Reservadas</th><th>Sin reserva</th><th>Arrendadas hoy</th><th>Mant./Revisión</th><th>Disponibles hoy</th><th>Unidades e ID</th><th>Estado</th><th>Acciones</th></tr></thead>
+    <tbody>{% for maquinaria in maquinarias %}<tr>
+      <td><strong>{{ maquinaria.nombre }}</strong></td><td>{{ maquinaria.categoria }}</td>
+      <td>${{ maquinaria.tarifa_diaria }} / día<br>${{ maquinaria.tarifa_semanal }} / semana</td>
+      <td><span class="fleet-number">{{ maquinaria.cantidad }}</span></td>
+      <td><span class="fleet-number reserved">{{ maquinaria.reservadas }}</span></td>
+      <td><span class="fleet-number available">{{ maquinaria.disponibles_globales }}</span></td>
+      <td><span class="fleet-number rented">{{ maquinaria.arrendadas_hoy }}</span></td>
+      <td><span class="fleet-number maintenance">{{ maquinaria.no_operativas }}</span></td>
+      <td><span class="fleet-number available">{{ maquinaria.disponibles_hoy }}</span></td>
+      <td><details class="fleet-dropdown"><summary>Ver {{ maquinaria.unidades.count }} IDs</summary><div class="fleet-units">
+        {% for unidad in maquinaria.unidades.all %}<form method="post" action="{% url 'unidad_flota_actualizar_web' unidad.id %}" class="unit-form">{% csrf_token %}
+          <strong>{{ unidad.codigo }}</strong>
+          <select name="estado" aria-label="Estado {{ unidad.codigo }}"><option value="DISPONIBLE" {% if unidad.estado == 'DISPONIBLE' %}selected{% endif %}>Disponible</option><option value="MANTENIMIENTO" {% if unidad.estado == 'MANTENIMIENTO' %}selected{% endif %}>Mantenimiento</option><option value="REVISION" {% if unidad.estado == 'REVISION' %}selected{% endif %}>Revisión</option></select>
+          <label><input type="checkbox" name="permiso_circulacion" {% if unidad.permiso_circulacion %}checked{% endif %}> Con permiso</label>
+          <button type="submit">Guardar</button>
+        </form>{% empty %}<span>Sin IDs registrados.</span>{% endfor %}
+      </div></details></td>
+      <td>{% if maquinaria.activo %}<span class="status status-completado">Activa</span>{% else %}<span class="status status-cancelado">Inactiva</span>{% endif %}</td>
+      <td><a href="{% url 'maquinaria_editar_web' maquinaria.id %}">Editar</a><form class="inline-form" method="post" action="{% url 'maquinaria_eliminar_web' maquinaria.id %}" onsubmit="return confirm('¿Eliminar esta maquinaria?')">{% csrf_token %}<button class="danger-link">Eliminar</button></form></td>
+    </tr>{% empty %}<tr><td colspan="12">No hay maquinaria registrada.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="panel-section">
+  <h2>Contratos</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>#</th><th>Empresa</th><th>Equipos</th><th>Total</th><th>Estado</th><th>Cambiar estado</th></tr></thead>
+    <tbody>{% for contrato in contratos %}<tr>
+      <td>{{ contrato.id }}</td><td>{{ contrato.usuario.get_full_name|default:contrato.usuario.username }}</td>
+      <td>{% for item in contrato.items.all %}{{ item.cantidad }}× {{ item.maquinaria_nombre }}{% if item.unidades_asignadas.exists %}<small class="assigned-ids">IDs: {% for unidad in item.unidades_asignadas.all %}{{ unidad.codigo }}{% if not forloop.last %}, {% endif %}{% endfor %}</small>{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+      <td>${{ contrato.total }}</td><td><span class="status status-{{ contrato.estado|lower }}">{{ contrato.get_estado_display }}</span></td>
+      <td>{% if contrato.estado != 'COMPLETADO' and contrato.estado != 'CANCELADO' %}<form class="state-form" method="post" action="{% url 'contrato_estado_web' contrato.id %}">{% csrf_token %}<select name="estado">{% if contrato.estado == 'PENDIENTE' %}<option value="PAGADO">Pagado</option>{% elif contrato.estado == 'PAGADO' %}<option value="ENTREGADO">Entregado</option>{% elif contrato.estado == 'ENTREGADO' %}<option value="COMPLETADO">Completado</option>{% endif %}<option value="CANCELADO">Cancelado</option></select><button>Actualizar</button></form>{% else %}—{% endif %}</td>
+    </tr>{% empty %}<tr><td colspan="6">No hay contratos.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="panel-section rental-calendar" id="calendario" aria-labelledby="calendar-title">
+  <div class="calendar-heading">
+    <div><p class="eyebrow">OCUPACIÓN PROGRAMADA</p><h2 id="calendar-title">{{ calendario_mes|date:'F Y'|capfirst }}</h2></div>
+    <nav aria-label="Cambiar mes"><a href="?mes={{ mes_anterior }}#calendario" aria-label="Mes anterior">←</a><a href="?mes={{ mes_siguiente }}#calendario" aria-label="Mes siguiente">→</a></nav>
+  </div>
+  <div class="calendar-scroll">
+    <table class="calendar-table">
+      <thead><tr><th>Lun</th><th>Mar</th><th>Mié</th><th>Jue</th><th>Vie</th><th>Sáb</th><th>Dom</th></tr></thead>
+      <tbody>{% for semana in calendario_semanas %}<tr>{% for dia in semana %}
+        <td class="calendar-day {% if not dia.es_mes %}outside{% endif %} {% if dia.es_hoy %}today{% endif %}" {% if dia.detalle %}title="{{ dia.detalle }}"{% endif %}>
+          <span class="day-number">{{ dia.fecha.day }}</span>
+          {% for evento in dia.eventos %}<span class="calendar-event event-{{ evento.clase }}"><b>{{ evento.tipo }}</b> {{ evento.cantidad }}u.</span>{% endfor %}
+        </td>
+      {% endfor %}</tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  <p class="calendar-note">Se muestran inicio y entrega de contratos PAGADO/ENTREGADO; las unidades en mantenimiento o revisión aparecen en el día actual.</p>
+</section>
 {% endblock %}

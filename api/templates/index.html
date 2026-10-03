@@ -20,11 +20,11 @@
       <div class="machine-image">{% if maquinaria.image_url %}<img src="{{ maquinaria.image_url }}" alt="{{ maquinaria.nombre }}" loading="lazy" onerror="this.parentElement.classList.add('image-error')"><div class="machine-placeholder image-fallback">⚙</div>{% else %}<div class="machine-placeholder">⚙</div>{% endif %}<span>{{ maquinaria.categoria }}</span></div>
       <div class="machine-body"><h3>{{ maquinaria.nombre }}</h3><p>{{ maquinaria.descripcion|truncatechars:115 }}</p>
         <div class="rates"><div><small>Tarifa diaria</small><strong>${{ maquinaria.tarifa_diaria }}</strong></div><div><small>Tarifa semanal</small><strong>${{ maquinaria.tarifa_semanal }}</strong></div></div>
-        <p class="fleet">{{ maquinaria.cantidad }} unidad{{ maquinaria.cantidad|pluralize:"es" }} en flota · Garantía ${{ maquinaria.garantia }}</p>
+        <p class="fleet">{{ maquinaria.cantidad }} unidad{{ maquinaria.cantidad|pluralize:"es" }} en flota · {{ maquinaria.disponibles_sin_reserva }} sin reserva · Garantía ${{ maquinaria.garantia }}</p>
         {% if request.user.is_authenticated and request.user.perfil.rol == 'EMPRESA_CONSTRUCTORA' %}
         <form class="rent-form" method="post" action="{% url 'agregar_carro_web' maquinaria.id %}">{% csrf_token %}
           <label>Unidades<input type="number" name="cantidad" value="1" min="1" max="{{ maquinaria.cantidad }}" required></label>
-          <button type="submit">Agregar al carro</button>
+          <button type="submit" {% if maquinaria.disponibles_sin_reserva == 0 %}class="consult-dates"{% endif %}>{% if maquinaria.disponibles_sin_reserva == 0 %}Consultar fechas{% else %}Agregar al carro{% endif %}</button>
         </form>
         {% elif not request.user.is_authenticated %}<a class="card-link" href="{% url 'login' %}">Ingresa para arrendar →</a>{% endif %}
       </div>
