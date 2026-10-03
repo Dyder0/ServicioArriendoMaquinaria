@@ -1,0 +1,571 @@
+============================================================
+MAPA EVA BACKEND — ARRIENDO DE MAQUINARIA
+============================================================
+
+Fecha de revisión: 02-10-2026
+Proyecto: Proyecto 6 — Arriendo de maquinaria de construcción
+Stack verificado: Django, Django REST Framework, PostgreSQL, JWT,
+django-filter y Swagger/OpenAPI.
+
+Leyenda: CUMPLE = implementado y verificable; PARCIAL = existe pero
+hay una brecha concreta; FALTA = no está implementado o no hay datos.
+
+------------------------------------------------------------
+01 POSTGRESQL
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: drf/settings.py
+CLASE / FUNCIÓN / BLOQUE: DATABASES
+LÍNEAS: 76-88
+QUÉ HACE: Configura django.db.backends.postgresql sobre la base arriendo_maquinaria y psycopg.
+POR QUÉ CUMPLE LA EVA: La conexión activa no usa SQLite; migraciones y tests se ejecutaron en PostgreSQL.
+CÓMO MOSTRARLO EN LA DEFENSA: Abrir settings.py y ejecutar `python manage.py showmigrations api`.
+PENDIENTE: Ninguno. El archivo SQLite legado fue retirado y está excluido por .gitignore.
+
+------------------------------------------------------------
+02 MODELOS Y RELACIONES
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py
+CLASE / FUNCIÓN / BLOQUE: PerfilUsuario, Maquinaria, CarroArriendo, ItemCarro, Contrato, ItemContrato
+LÍNEAS: 17-205
+QUÉ HACE: Define seis modelos de negocio con OneToOne y ForeignKey, además de CASCADE, PROTECT y SET_NULL.
+POR QUÉ CUMPLE LA EVA: Hay relaciones 1:1 Usuario-Carro/Perfil y 1:N Carro-Items, Contrato-Items y Maquinaria-Items.
+CÓMO MOSTRARLO EN LA DEFENSA: Mostrar OneToOneField en líneas 22 y 77, y ForeignKey en 99-100, 167 y 186-188.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+03 CHOICES
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py
+CLASE / FUNCIÓN / BLOQUE: PerfilUsuario.ROLES y Contrato.ESTADOS
+LÍNEAS: 18-23 y 159-168
+QUÉ HACE: Restringe roles y estados a valores controlados.
+POR QUÉ CUMPLE LA EVA: Incluye PENDIENTE, PAGADO, ENTREGADO, COMPLETADO y CANCELADO.
+CÓMO MOSTRARLO EN LA DEFENSA: Abrir la clase Contrato y señalar choices=ESTADOS.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+04 JWT ACCESS
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: drf/settings.py; api/urls.py; api/serializer.py
+CLASE / FUNCIÓN / BLOQUE: JWTAuthentication, TokenConRolView, TokenConRolSerializer
+LÍNEAS: settings 127-134; urls 13-14 y 42; serializer 19-29
+QUÉ HACE: SimpleJWT autentica peticiones y `/api/token/` entrega access token.
+POR QUÉ CUMPLE LA EVA: La autenticación JWT está activa globalmente en DRF.
+CÓMO MOSTRARLO EN LA DEFENSA: Hacer POST a `/api/token/` y copiar access en Swagger Authorize.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+05 JWT REFRESH
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/urls.py
+CLASE / FUNCIÓN / BLOQUE: TokenRefreshView
+LÍNEAS: 5 y 43
+QUÉ HACE: Renueva el access token a partir del refresh token.
+POR QUÉ CUMPLE LA EVA: Expone POST `/api/token/refresh/` con la vista oficial de SimpleJWT.
+CÓMO MOSTRARLO EN LA DEFENSA: Enviar `{"refresh":"..."}` a `/api/token/refresh/`.
+PENDIENTE: No hay una prueba automatizada específica del refresh, aunque la ruta y librería están configuradas.
+
+------------------------------------------------------------
+06 CLAIM ROL
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/serializer.py
+CLASE / FUNCIÓN / BLOQUE: TokenConRolSerializer.get_token
+LÍNEAS: 7-29
+QUÉ HACE: Inserta el claim firmado `rol` en el JWT y también lo devuelve junto a los tokens.
+POR QUÉ CUMPLE LA EVA: El claim toma el rol persistido del perfil del usuario.
+CÓMO MOSTRARLO EN LA DEFENSA: Decodificar el access token en jwt.io y señalar `rol`.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+07 PERMISOS EMPRESA
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/permissions.py; api/views.py
+CLASE / FUNCIÓN / BLOQUE: EsEmpresa; CarroArriendoAPIView, CheckoutAPIView, MisContratosAPIView
+LÍNEAS: permissions 6-17; views 44-116
+QUÉ HACE: Restringe carro, checkout e historial a EMPRESA_CONSTRUCTORA autenticada.
+POR QUÉ CUMPLE LA EVA: El permiso consulta el perfil persistido, no un valor enviado por el cliente.
+CÓMO MOSTRARLO EN LA DEFENSA: Autenticarse como Ejecutivo e intentar GET `/api/carro-arriendo/`; debe responder 403.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+08 PERMISOS EJECUTIVO
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/permissions.py; api/views.py
+CLASE / FUNCIÓN / BLOQUE: EsEjecutivo y MaquinariaPublicaOEjecutivo
+LÍNEAS: permissions 20-32; views 23-35 y 124-137
+QUÉ HACE: Reserva escrituras de maquinaria y cambios de estado al Ejecutivo.
+POR QUÉ CUMPLE LA EVA: Los métodos no seguros y el PATCH de contrato verifican EJECUTIVO_ARRIENDOS.
+CÓMO MOSTRARLO EN LA DEFENSA: Repetir POST de maquinaria con ambos roles y comparar 403/201.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+09 CATÁLOGO PÚBLICO
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/views.py; api/urls.py
+CLASE / FUNCIÓN / BLOQUE: MaquinariaViewSet y router
+LÍNEAS: views 18-35; urls 17-18 y 37
+QUÉ HACE: Lista maquinaria activa sin requerir autenticación.
+POR QUÉ CUMPLE LA EVA: SAFE_METHODS son públicos y GET `/api/maquinarias/` funciona anónimamente.
+CÓMO MOSTRARLO EN LA DEFENSA: Abrir `/api/maquinarias/` en ventana privada.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+10 CARRO 1:1
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py
+CLASE / FUNCIÓN / BLOQUE: CarroArriendo.usuario
+LÍNEAS: 71-90
+QUÉ HACE: OneToOneField asegura un carro activo como máximo por usuario.
+POR QUÉ CUMPLE LA EVA: La unicidad se garantiza en PostgreSQL, no solo en la vista.
+CÓMO MOSTRARLO EN LA DEFENSA: Señalar OneToOneField y related_name='carro_arriendo'.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+11 PERSISTENCIA DEL CARRO
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py; api/views.py
+CLASE / FUNCIÓN / BLOQUE: CarroArriendo, ItemCarro, CarroArriendoAPIView.get
+LÍNEAS: models 76-110; views 44-90
+QUÉ HACE: Guarda carro e ítems en PostgreSQL y los recupera por request.user.
+POR QUÉ CUMPLE LA EVA: Logout solo termina la sesión; no existe borrado del carro ni localStorage/sessionStorage.
+CÓMO MOSTRARLO EN LA DEFENSA: Agregar, cerrar sesión, entrar desde otro navegador y hacer GET del carro.
+PENDIENTE: No hay test explícito de logout/cambio de dispositivo; la persistencia de BD sí está probada.
+
+------------------------------------------------------------
+12 ITEMCARRO
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py
+CLASE / FUNCIÓN / BLOQUE: ItemCarro
+LÍNEAS: 93-151
+QUÉ HACE: Relaciona carro, maquinaria, cantidad y período; unifica una maquinaria por carro.
+POR QUÉ CUMPLE LA EVA: Usa ForeignKey e integridad UniqueConstraint/CheckConstraint.
+CÓMO MOSTRARLO EN LA DEFENSA: Abrir clase ItemCarro y migración 0007.
+PENDIENTE: El nombre es ItemCarro en vez de ItemCarroArriendo, pero es funcionalmente equivalente.
+
+------------------------------------------------------------
+13 FECHAS INICIO/FIN
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py; api/serializer.py; api/services.py; api/templates/carro.html
+CLASE / FUNCIÓN / BLOQUE: ItemCarro.fecha_inicio/fecha_fin, validate, crear_contrato
+LÍNEAS: models 102-132; serializer 76-97; services 16-24; template 10-12
+QUÉ HACE: Permite agregarlas después, las persiste y exige ambas con fin posterior antes del checkout.
+POR QUÉ CUMPLE LA EVA: Hay validación de modelo, serializer, formulario y servicio.
+CÓMO MOSTRARLO EN LA DEFENSA: Intentar checkout sin fechas y luego guardar fechas desde el carro.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+14 TARIFA DIARIA
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py
+CLASE / FUNCIÓN / BLOQUE: Maquinaria.tarifa_diaria; ItemCarro.subtotal_arriendo
+LÍNEAS: 39 y 134-140
+QUÉ HACE: Guarda y usa la tarifa diaria para días restantes.
+POR QUÉ CUMPLE LA EVA: La tarifa semanal no reemplaza la diaria.
+CÓMO MOSTRARLO EN LA DEFENSA: Usar un período de 9 días y explicar 1 semana + 2 días.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+15 TARIFA SEMANAL
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py
+CLASE / FUNCIÓN / BLOQUE: Maquinaria.tarifa_semanal; ItemCarro.semanas
+LÍNEAS: 40 y 122-140
+QUÉ HACE: Cobra semanas completas con tarifa semanal y conserva días restantes diarios.
+POR QUÉ CUMPLE LA EVA: Implementa `divmod(dias, 7)` en el cálculo servidor.
+CÓMO MOSTRARLO EN LA DEFENSA: Abrir subtotal_arriendo y el test de precio en tests.py 33-37.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+16 GARANTÍA
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py
+CLASE / FUNCIÓN / BLOQUE: Maquinaria.garantia; ItemCarro.subtotal/garantia_total
+LÍNEAS: 41 y 142-151
+QUÉ HACE: Suma una garantía por cada unidad al subtotal del arriendo.
+POR QUÉ CUMPLE LA EVA: La garantía se calcula y se copia al histórico.
+CÓMO MOSTRARLO EN LA DEFENSA: Comparar subtotal_arriendo con subtotal en un ítem.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+17 CÁLCULO DE PRECIO
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py; static/mall.js
+CLASE / FUNCIÓN / BLOQUE: propiedades dias/semanas/subtotal; vista previa JS
+LÍNEAS: models 116-151; JS 42-86
+QUÉ HACE: Centraliza el cálculo autoritativo en el modelo; JS solo da una vista previa inmediata.
+POR QUÉ CUMPLE LA EVA: Total servidor suma subtotales Decimal y no confía en valores del navegador.
+CÓMO MOSTRARLO EN LA DEFENSA: Abrir ItemCarro y ejecutar test_precio_semanal_dias_restantes_y_garantia.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+18 DISPONIBILIDAD POR RANGO
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py; api/serializer.py
+CLASE / FUNCIÓN / BLOQUE: Maquinaria.unidades_reservadas/disponibilidad
+LÍNEAS: models 55-68; serializer 45-59
+QUÉ HACE: Resta de la flota las cantidades reservadas que coinciden con el rango consultado.
+POR QUÉ CUMPLE LA EVA: No depende solo del stock global; acepta fecha_inicio y fecha_fin.
+CÓMO MOSTRARLO EN LA DEFENSA: Consultar `/api/maquinarias/?fecha_inicio=...&fecha_fin=...`.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+19 SOLAPAMIENTO DE FECHAS
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py; api/services.py
+CLASE / FUNCIÓN / BLOQUE: unidades_reservadas y cambiar_estado_contrato
+LÍNEAS: models 55-65; services 78-95
+QUÉ HACE: Detecta intersección con inicio < fin solicitado y fin > inicio solicitado.
+POR QUÉ CUMPLE LA EVA: Suma cantidad solicitada, ocupada y compara contra la flota bloqueada.
+CÓMO MOSTRARLO EN LA DEFENSA: Mostrar filtros ORM y test_pago_reserva_y_evitar_sobre_reserva.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+20 CHECKOUT
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/views.py; api/services.py
+CLASE / FUNCIÓN / BLOQUE: CheckoutAPIView.post y crear_contrato
+LÍNEAS: views 98-107; services 8-37
+QUÉ HACE: Valida carro y fechas, crea contrato PENDIENTE, copia históricos y vacía ítems atómicamente.
+POR QUÉ CUMPLE PARCIALMENTE: La EVA pide validar disponibilidad también en checkout; hoy la validación fuerte se realiza al pasar a PAGADO, no al crear PENDIENTE.
+CÓMO MOSTRARLO EN LA DEFENSA: Mostrar crear_contrato y después cambiar_estado_contrato.
+PENDIENTE: Si la EVA exige ambas validaciones, agregar una comprobación informativa en checkout sin reservar unidades; mantener la comprobación bloqueante en PAGADO.
+
+------------------------------------------------------------
+21 TRANSACTION.ATOMIC
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/services.py
+CLASE / FUNCIÓN / BLOQUE: crear_contrato y cambiar_estado_contrato
+LÍNEAS: 13-37 y 61-99
+QUÉ HACE: Envuelve checkout y transición de estado en transacciones completas.
+POR QUÉ CUMPLE LA EVA: select_for_update y atomic evitan resultados parciales y pagos concurrentes sobre la misma flota.
+CÓMO MOSTRARLO EN LA DEFENSA: Señalar decoradores @transaction.atomic y select_for_update.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+22 CREACIÓN DE CONTRATO
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/services.py
+CLASE / FUNCIÓN / BLOQUE: crear_contrato
+LÍNEAS: 13-37
+QUÉ HACE: Crea encabezado, ítems históricos y deja el contrato en PENDIENTE.
+POR QUÉ CUMPLE LA EVA: El flujo parte en carro, pasa a contrato y limpia solo los ítems procesados.
+CÓMO MOSTRARLO EN LA DEFENSA: Ejecutar POST `/api/contratos/checkout/` y luego GET `/api/mis-contratos/`.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+23 PRECIOS HISTÓRICOS
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py; api/services.py
+CLASE / FUNCIÓN / BLOQUE: ItemContrato y bulk_create
+LÍNEAS: models 180-202; services 26-35
+QUÉ HACE: Copia nombre, tarifa diaria, semanal, garantía, período y subtotal.
+POR QUÉ CUMPLE LA EVA: Editar o eliminar Maquinaria no cambia contratos anteriores; FK usa SET_NULL.
+CÓMO MOSTRARLO EN LA DEFENSA: Comparar campos de Maquinaria e ItemContrato.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+24 ESTADO PENDIENTE
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py; api/services.py
+CLASE / FUNCIÓN / BLOQUE: Contrato.estado y crear_contrato
+LÍNEAS: models 159-169; services 26-27
+QUÉ HACE: Es el estado inicial automático después del checkout.
+POR QUÉ CUMPLE LA EVA: No reserva flota hasta el pago.
+CÓMO MOSTRARLO EN LA DEFENSA: Crear contrato y leer `estado: PENDIENTE`.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+25 ESTADO PAGADO
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/services.py
+CLASE / FUNCIÓN / BLOQUE: cambiar_estado_contrato
+LÍNEAS: 61-98
+QUÉ HACE: Revalida disponibilidad bajo bloqueo y convierte el contrato en reserva activa.
+POR QUÉ CUMPLE LA EVA: Solo PAGADO y ENTREGADO cuentan como unidades ocupadas.
+CÓMO MOSTRARLO EN LA DEFENSA: Mostrar select_for_update y estados del filtro en lines 80-83.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+26 ESTADO ENTREGADO
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/services.py; api/models.py
+CLASE / FUNCIÓN / BLOQUE: TRANSICIONES y unidades_reservadas
+LÍNEAS: services 45-50; models 58-62
+QUÉ HACE: Permite PAGADO -> ENTREGADO y mantiene la unidad ocupada.
+POR QUÉ CUMPLE LA EVA: ENTREGADO permanece dentro de los estados reservantes.
+CÓMO MOSTRARLO EN LA DEFENSA: Avanzar el contrato desde el panel Ejecutivo.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+27 ESTADO COMPLETADO
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/services.py
+CLASE / FUNCIÓN / BLOQUE: TRANSICIONES y cambiar_estado_contrato
+LÍNEAS: 40-50 y 97-99
+QUÉ HACE: Permite ENTREGADO -> COMPLETADO y lo deja terminal.
+POR QUÉ CUMPLE LA EVA: COMPLETADO deja de contarse como reserva y reincorpora la flota.
+CÓMO MOSTRARLO EN LA DEFENSA: Mostrar test_completar_libera_periodo en tests.py 70-75.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+28 ESTADO CANCELADO
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/services.py
+CLASE / FUNCIÓN / BLOQUE: TRANSICIONES
+LÍNEAS: 40-51
+QUÉ HACE: Permite cancelar desde PENDIENTE, PAGADO o ENTREGADO y rechaza salir de estados terminales.
+POR QUÉ CUMPLE LA EVA: La transición está enumerada explícitamente y las inválidas lanzan ValueError.
+CÓMO MOSTRARLO EN LA DEFENSA: Intentar un salto inválido y mostrar respuesta 409.
+PENDIENTE: Falta una prueba automatizada específica de transición inválida.
+
+------------------------------------------------------------
+29 LIBERACIÓN DE DISPONIBILIDAD
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py; api/services.py; api/tests.py
+CLASE / FUNCIÓN / BLOQUE: unidades_reservadas, cambio de estado y tests de liberación
+LÍNEAS: models 55-68; services 54-99; tests 63-75
+QUÉ HACE: Solo PAGADO/ENTREGADO ocupan flota; CANCELADO/COMPLETADO quedan excluidos automáticamente.
+POR QUÉ CUMPLE LA EVA: La liberación se demuestra con pruebas para ambos estados.
+CÓMO MOSTRARLO EN LA DEFENSA: Ejecutar los tests de cancelar y completar.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+30 CRUD MAQUINARIA
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/views.py; api/urls.py; api/client_views.py
+CLASE / FUNCIÓN / BLOQUE: MaquinariaViewSet y panel Ejecutivo
+LÍNEAS: views 18-35; urls 17-18 y 37; client_views 126-161
+QUÉ HACE: ModelViewSet aporta CREATE/READ/UPDATE/PATCH/DELETE; panel propio ofrece gestión web.
+POR QUÉ CUMPLE LA EVA: Las rutas estándar son `/api/maquinarias/` y `/api/maquinarias/{id}/`; no existe `/admin/`.
+CÓMO MOSTRARLO EN LA DEFENSA: Abrir Swagger y el panel `/panel/` con Ejecutivo.
+PENDIENTE: No hay tests automatizados de éxito para las cuatro operaciones, aunque sí hay test de denegación por rol.
+
+------------------------------------------------------------
+31 FILTROS DJANGO-FILTER
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: requirements.txt; drf/settings.py; api/filters.py; api/views.py
+CLASE / FUNCIÓN / BLOQUE: MaquinariaFilter y DjangoFilterBackend
+LÍNEAS: requirements 4; settings 40 y 132; filters 6-19; views 26-29
+QUÉ HACE: Filtra categoría, activo, precio diario mínimo/máximo y tarifa semanal mínima/máxima.
+POR QUÉ CUMPLE LA EVA: Son NumberFilter/FilterSet conectados realmente al queryset del ViewSet.
+CÓMO MOSTRARLO EN LA DEFENSA: Probar `?categoria=Excavación&precio_max=300000`.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+32 BÚSQUEDA
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/views.py
+CLASE / FUNCIÓN / BLOQUE: SearchFilter y ordering_fields
+LÍNEAS: 23-29
+QUÉ HACE: Busca por nombre, categoría y descripción; permite ordenar por campos útiles.
+POR QUÉ CUMPLE LA EVA: DRF SearchFilter está aplicado al ViewSet, no solo declarado.
+CÓMO MOSTRARLO EN LA DEFENSA: Probar `?search=excavadora&ordering=tarifa_diaria`.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+33 SWAGGER / OPENAPI
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: drf/settings.py; api/urls.py; api/views.py
+CLASE / FUNCIÓN / BLOQUE: drf-spectacular, AutoSchema y @extend_schema
+LÍNEAS: settings 41 y 127-140; urls 3 y 44-45; views 47-127
+QUÉ HACE: Genera esquema OpenAPI y describe requests/responses de vistas API.
+POR QUÉ CUMPLE LA EVA: `manage.py spectacular --validate` terminó sin errores.
+CÓMO MOSTRARLO EN LA DEFENSA: Abrir `/api/schema/` y revisar paths/components.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+34 /API/DOCS/ Y JWT BEARER
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/urls.py; esquema OpenAPI generado
+CLASE / FUNCIÓN / BLOQUE: SpectacularSwaggerView y securitySchemes.jwtAuth
+LÍNEAS: urls 44-45; esquema validado contiene jwtAuth en securitySchemes
+QUÉ HACE: Sirve Swagger UI y muestra autenticación Bearer JWT para rutas protegidas.
+POR QUÉ CUMPLE LA EVA: drf-spectacular detecta JWTAuthentication; el esquema validado contiene `jwtAuth`.
+CÓMO MOSTRARLO EN LA DEFENSA: Abrir `/api/docs/`, usar Authorize con `Bearer <access>` y ejecutar una ruta protegida.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+35 COMENTARIOS POR BLOQUES
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/models.py, api/serializer.py, api/views.py, api/permissions.py, api/services.py, api/filters.py, api/client_views.py, static/mall.js
+CLASE / FUNCIÓN / BLOQUE: Roles, relaciones, precio, disponibilidad, JWT, permisos, checkout, estados, filtros y JS
+LÍNEAS: models 12-217; serializer 7-127; views 18-137; services 8-99; JS 2-86
+QUÉ HACE: Explica por bloques la lógica relevante sin comentar instrucciones obvias línea por línea.
+POR QUÉ CUMPLE LA EVA: Cubre expresamente los temas exigidos por la rúbrica.
+CÓMO MOSTRARLO EN LA DEFENSA: Recorrer los encabezados `# ===` en esos archivos.
+PENDIENTE: No existen utils.py ni signals.py separados; el signal está documentado en models.py 208-217.
+
+------------------------------------------------------------
+36 FOOTER Y TEMPLATE BASE
+------------------------------------------------------------
+ESTADO: PARCIAL
+ARCHIVO: api/templates/base.html
+CLASE / FUNCIÓN / BLOQUE: template base y `<footer>`
+LÍNEAS: 1-32, footer en 28
+QUÉ HACE: Todas las páginas heredan una base reutilizable con footer visible, autor, sección y año 2026.
+POR QUÉ CUMPLE LA EVA: La estructura existe y contiene los datos reales solicitados.
+CÓMO MOSTRARLO EN LA DEFENSA: Abrir cualquier página y bajar al footer.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+37 DATOS DEL ALUMNO
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/templates/base.html
+CLASE / FUNCIÓN / BLOQUE: footer
+LÍNEAS: 28
+QUÉ HACE: Muestra Mario Sanzana, sección AP-N4-C1 y año 2026.
+POR QUÉ CUMPLE LA EVA: Los tres datos requeridos están visibles en el footer común.
+CÓMO MOSTRARLO EN LA DEFENSA: Abrir cualquier página y bajar al footer.
+PENDIENTE: Ninguno.
+
+------------------------------------------------------------
+38 GITHUB / .GITIGNORE / SECRETOS
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: .gitignore; drf/settings.py; estado Git
+CLASE / FUNCIÓN / BLOQUE: reglas ignore, DATABASES y SECRET_KEY
+LÍNEAS: .gitignore 1-7; settings bloque inicial y DATABASES
+QUÉ HACE: Excluye .env, env/, bytecode y SQLite; settings carga SECRET_KEY y credenciales PostgreSQL desde variables de entorno.
+POR QUÉ CUMPLE LA EVA: Existe .env.example sin secretos y el código fuente ya no contiene la contraseña ni SECRET_KEY reales.
+CÓMO MOSTRARLO EN LA DEFENSA: Ejecutar `git status`, `git remote -v` y `git check-ignore -v env/pyvenv.cfg`.
+PENDIENTE: Crear el commit inicial en el repositorio nuevo y configurar su remoto; no se hizo push automáticamente.
+
+------------------------------------------------------------
+39 TESTS EXISTENTES
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/tests.py
+CLASE / FUNCIÓN / BLOQUE: PrecioYContratoTests, APITests y WebTests
+LÍNEAS: 12-163
+QUÉ HACE: Prueba precio, fechas, checkout, sobre-reserva, liberación, JWT/rol, filtros, permisos, carro, estados, panel y footer.
+POR QUÉ CUMPLE LA EVA: Se ejecutaron 14 tests correctamente contra la configuración PostgreSQL.
+CÓMO MOSTRARLO EN LA DEFENSA: Ejecutar `python manage.py test`.
+PENDIENTE: Mejorable con tests explícitos para refresh, CRUD exitoso completo, DELETE del carro y transición inválida.
+
+------------------------------------------------------------
+40 ENDPOINTS PROYECTO 6
+------------------------------------------------------------
+ESTADO: CUMPLE
+ARCHIVO: api/urls.py; api/views.py
+CLASE / FUNCIÓN / BLOQUE: router y urlpatterns
+LÍNEAS: urls 17-45; views 23-137
+QUÉ HACE: Expone todas las rutas mínimas con métodos y roles equivalentes a la EVA.
+POR QUÉ CUMPLE LA EVA:
+- Público: GET `/api/maquinarias/`.
+- Empresa: GET/POST/PATCH/DELETE `/api/carro-arriendo/`, POST `/api/contratos/checkout/`, GET `/api/mis-contratos/`.
+- Ejecutivo: POST `/api/maquinarias/`, PUT/PATCH/DELETE `/api/maquinarias/{id}/`, PATCH `/api/contratos/{id}/estado/`.
+CÓMO MOSTRARLO EN LA DEFENSA: Abrir `/api/docs/` y recorrer cada path con los dos tokens de rol.
+PENDIENTE: PATCH del carro es adicional y permite guardar cantidad/fechas; no reemplaza ninguna ruta requerida.
+
+============================================================
+RESUMEN DE CUMPLIMIENTO
+============================================================
+
+CUMPLE: 39
+PARCIAL: 1
+FALTA: 0
+
+5 COSAS MÁS IMPORTANTES QUE FALTAN:
+
+1. Si la EVA exige validación doble, comprobar disponibilidad también en checkout sin reservar, conservando la validación atómica en PAGADO.
+2. Crear el commit inicial del proyecto nuevo.
+3. Configurar el remoto del repositorio nuevo antes del primer push.
+4. Agregar tests específicos para refresh JWT y CRUD exitoso completo.
+5. Agregar un test específico para transiciones de contrato inválidas.
+
+============================================================
+GUÍA RÁPIDA PARA LA DEFENSA
+============================================================
+
+Pregunta: ¿Dónde está PostgreSQL?
+Respuesta: drf/settings.py, bloque DATABASES, líneas 79-88. ENGINE es django.db.backends.postgresql.
+
+Pregunta: ¿Dónde están los modelos y relaciones?
+Respuesta: api/models.py. PerfilUsuario y CarroArriendo usan OneToOne; ItemCarro, Contrato e ItemContrato usan ForeignKey.
+
+Pregunta: ¿Dónde está el JWT?
+Respuesta: api/serializer.py, TokenConRolSerializer líneas 19-29; api/urls.py líneas 42-43; configuración en drf/settings.py 127-134.
+
+Pregunta: ¿Cómo funcionan access y refresh?
+Respuesta: POST `/api/token/` devuelve ambos; POST `/api/token/refresh/` recibe refresh y devuelve un access nuevo.
+
+Pregunta: ¿Dónde está el claim rol?
+Respuesta: api/serializer.py, get_token, líneas 20-24.
+
+Pregunta: ¿Dónde están los permisos?
+Respuesta: api/permissions.py completo; las vistas los asignan en permission_classes.
+
+Pregunta: ¿Cómo persiste el carro?
+Respuesta: api/models.py, CarroArriendo líneas 71-90 e ItemCarro 93-151. Ambos son tablas PostgreSQL vinculadas al usuario.
+
+Pregunta: ¿Cómo se calcula el precio?
+Respuesta: api/models.py, propiedades dias, semanas, subtotal_arriendo, subtotal y garantia_total, líneas 116-151.
+
+Pregunta: ¿Cómo verificas disponibilidad?
+Respuesta: api/models.py, Maquinaria.unidades_reservadas/disponibilidad líneas 55-68; api/services.py líneas 68-95 durante PAGADO.
+
+Pregunta: ¿Cómo detectas solapamientos?
+Respuesta: Se usa `fecha_inicio__lt=fin` y `fecha_fin__gt=inicio` en models.py y services.py.
+
+Pregunta: ¿Dónde haces transaction.atomic?
+Respuesta: api/services.py, crear_contrato línea 13 y cambiar_estado_contrato línea 61.
+
+Pregunta: ¿Cómo evitas dos pagos simultáneos?
+Respuesta: cambiar_estado_contrato bloquea contrato y filas Maquinaria con select_for_update antes de contar reservas.
+
+Pregunta: ¿Cómo funcionan CANCELADO y COMPLETADO?
+Respuesta: services.py TRANSICIONES líneas 45-51. Al quedar fuera de PAGADO/ENTREGADO dejan de contarse como ocupación.
+
+Pregunta: ¿Dónde están los precios históricos?
+Respuesta: api/models.py ItemContrato líneas 180-202 y services.py bulk_create líneas 28-35.
+
+Pregunta: ¿Dónde están los filtros?
+Respuesta: api/filters.py MaquinariaFilter; conexión en api/views.py líneas 26-29.
+
+Pregunta: ¿Dónde está Swagger?
+Respuesta: api/urls.py líneas 44-45: `/api/schema/` y `/api/docs/`; configuración en drf/settings.py 127-140.
+
+Pregunta: ¿Dónde están los comentarios por bloques?
+Respuesta: api/models.py, serializer.py, views.py, permissions.py, services.py, filters.py, client_views.py y static/mall.js.
+
+Pregunta: ¿Se usa Django Admin?
+Respuesta: No. No hay ruta `/admin/`; la gestión propia está en client_views.py y `/panel/`.
+
+Pregunta: ¿Qué debo reconocer como pendiente?
+Respuesta: Solo la posible validación adicional de disponibilidad en checkout según interpretación estricta de la EVA; para publicar aún corresponde crear el commit y configurar el repositorio nuevo.

@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}Registro empresa · MaquiRent{% endblock %}
+{% block content %}
+<div class="auth-card card shadow-sm mx-auto"><div class="card-body p-4">
+  <p class="eyebrow">EMPRESA CONSTRUCTORA</p><h1 class="h3 mb-2">Crear cuenta</h1><p class="text-secondary mb-4">Tu carro y contratos quedarán disponibles en cualquier dispositivo.</p>
+  <form method="post" novalidate>{% csrf_token %}
+    {% for field in form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}</div>{% endfor %}
+    <button class="btn btn-primary w-100" type="submit">Crear cuenta</button>
+  </form>
+  <p class="text-center mt-4 mb-0">¿Ya tienes cuenta? <a href="{% url 'login' %}">Ingresa aquí</a></p>
+</div></div>
+{% endblock %}

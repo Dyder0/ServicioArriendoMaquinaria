@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}Ingresar · MaquiRent{% endblock %}
+{% block content %}
+<div class="auth-card card shadow-sm mx-auto"><div class="card-body p-4">
+  <p class="eyebrow">ACCESO SEGURO</p><h1 class="h3 mb-2">Iniciar sesión</h1><p class="text-secondary mb-4">Gestiona tus arriendos y contratos.</p>
+  {% if form.errors %}<div class="alert alert-danger">Usuario o contraseña incorrectos.</div>{% endif %}
+  <form method="post">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}">
+    <div class="mb-3"><label class="form-label" for="id_username">Usuario</label><input class="form-control" type="text" name="username" id="id_username" required autofocus></div>
+    <div class="mb-3"><label class="form-label" for="id_password">Contraseña</label><input class="form-control" type="password" name="password" id="id_password" required></div>
+    <button class="btn btn-primary w-100" type="submit">Ingresar</button>
+  </form>
+  <p class="text-center mt-4 mb-0">¿No tienes cuenta? <a href="{% url 'register' %}">Regístrate</a></p>
+</div></div>
+{% endblock %}

@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block title %}Mis contratos · MaquiRent{% endblock %}
+{% block content %}
+<section class="content-head"><p class="eyebrow">HISTORIAL</p><h1>Mis contratos</h1></section>
+{% for contrato in contratos %}<article class="contract"><header><div><strong>Contrato #{{ contrato.id }}</strong><small>{{ contrato.creado_en|date:'d/m/Y H:i' }}</small></div><span class="status status-{{ contrato.estado|lower }}">{{ contrato.get_estado_display }}</span></header>{% for item in contrato.items.all %}<div class="contract-item"><span>{{ item.cantidad }} × {{ item.maquinaria_nombre }}<small>{{ item.fecha_inicio|date:'d/m/Y' }} — {{ item.fecha_fin|date:'d/m/Y' }}</small></span><strong>${{ item.subtotal }}</strong></div>{% endfor %}<footer>Total <strong>${{ contrato.total }}</strong></footer></article>
+{% empty %}<div class="empty-state"><h3>Aún no tienes contratos</h3><a href="{% url 'home' %}">Ver maquinaria</a></div>{% endfor %}
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Carro de arriendo · MaquiRent{% endblock %}
+{% block content %}
+<section class="content-head"><p class="eyebrow">TU SOLICITUD</p><h1>Carro de arriendo</h1><p>Define aquí el período de cada equipo. Las unidades se reservan únicamente al confirmar el pago.</p></section>
+<div class="cart-layout"><div>
+{% for item in carro.items.all %}
+<article class="cart-row cart-edit-item" data-daily="{{ item.maquinaria.tarifa_diaria }}" data-weekly="{{ item.maquinaria.tarifa_semanal }}" data-guarantee="{{ item.maquinaria.garantia }}" data-current-subtotal="{{ item.subtotal }}">
+  <div class="cart-machine"><span class="tag">{{ item.maquinaria.categoria }}</span><h3>{{ item.maquinaria.nombre }}</h3><p>{{ item.maquinaria.descripcion|truncatechars:100 }}</p>
+    <form class="cart-edit-form" method="post" action="{% url 'actualizar_item_carro_web' item.id %}">{% csrf_token %}
+      <label>Cantidad<input type="number" name="cantidad" value="{{ item.cantidad }}" min="1" max="{{ item.maquinaria.cantidad }}" required></label>
+      <label>Fecha de inicio<input type="date" name="fecha_inicio" value="{{ item.fecha_inicio|date:'Y-m-d' }}" required></label>
+      <label>Fecha de término<input type="date" name="fecha_fin" value="{{ item.fecha_fin|date:'Y-m-d' }}" required></label>
+      <button type="submit">Guardar cambios</button>
+    </form>
+    <div class="price-breakdown {% if not item.fechas_validas %}invalid-dates{% endif %}">
+      {% if item.fechas_validas %}
+      <span><b class="preview-days">{{ item.dias }}</b> días: <b class="preview-weeks">{{ item.semanas }}</b> semana(s) a ${{ item.maquinaria.tarifa_semanal }} + <b class="preview-rest-days">{{ item.dias_restantes }}</b> día(s) a ${{ item.maquinaria.tarifa_diaria }}</span>
+      <span>Arriendo: $<b class="preview-rental">{{ item.subtotal_arriendo }}</b> · Garantía: ${{ item.garantia_total }}</span>
+      {% else %}<span class="preview-message">Selecciona y guarda fechas válidas para calcular el arriendo.</span>{% endif %}
+    </div>
+  </div>
+  <div class="cart-price"><strong>$<span class="preview-subtotal">{{ item.subtotal }}</span></strong><small>Subtotal</small><form method="post" action="{% url 'eliminar_item_carro_web' item.id %}">{% csrf_token %}<button class="danger-link" type="submit">Eliminar</button></form></div>
+</article>
+{% empty %}<div class="empty-state"><h3>Tu carro está vacío</h3><a href="{% url 'home' %}">Explorar maquinaria</a></div>{% endfor %}
+</div><aside class="summary"><h2>Resumen</h2><div><span>Total con garantías</span><strong>$<span id="cart-total">{{ carro.total }}</span></strong></div>{% if not carro.listo_checkout and carro.items.exists %}<p class="summary-warning">Completa y guarda fechas válidas en todos los equipos.</p>{% endif %}<form method="post" action="{% url 'checkout_web' %}">{% csrf_token %}<button class="primary-button w-100" {% if not carro.listo_checkout %}disabled{% endif %}>Crear contrato</button></form></aside></div>
+{% endblock %}

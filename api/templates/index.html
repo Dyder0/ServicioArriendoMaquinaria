@@ -1,112 +1,35 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema Académico</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f6f9;
-            color: #333;
-        }
-        header {
-            background-color: #2c3e50;
-            padding: 15px 30px;
-            color: white;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        header h1 {
-            margin: 0;
-            font-size: 22px;
-        }
-        nav a {
-            color: white;
-            text-decoration: none;
-            margin-left: 20px;
-            font-weight: bold;
-        }
-        nav a:hover {
-            text-decoration: underline;
-        }
-        .container {
-            max-width: 900px;
-            margin: 40px auto;
-            padding: 20px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .btn {
-            display: inline-block;
-            padding: 10px 18px;
-            background-color: #3498db;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            margin: 5px;
-        }
-        .btn:hover {
-            background-color: #2980b9;
-        }
-        .cards-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-top: 25px;
-        }
-        .card {
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 20px;
-            text-align: center;
-            background: #fafafa;
-        }
-        .card h3 {
-            margin-top: 0;
-            color: #2c3e50;
-        }
-    </style>
-</head>
-<body>
+{% extends 'base.html' %}
+{% load static %}
+{% block content %}
+<aside class="crane" aria-hidden="true"><div class="crane-mast"></div><div class="crane-arm"></div><div class="crane-cable" id="crane-cable"><span></span></div></aside>
+<section class="hero">
+  <div><p class="eyebrow">POTENCIA PARA TU PRÓXIMA OBRA</p><h1>Maquinaria confiable,<br><em>cuando la necesitas.</em></h1><p>Arrienda equipos profesionales con tarifas transparentes, garantía y disponibilidad por período.</p><a class="primary-button" href="#catalogo">Explorar catálogo</a></div>
+  <div class="hero-stat"><strong>24/7</strong><span>Gestión digital de contratos y equipos</span></div>
+</section>
 
-    <header>
-        <h1>🎓 Sistema Académico</h1>
-        <nav>
-            <a href="/">Inicio</a>
-            <a href="/cursos/">Cursos</a>
-            <a href="/estudiantes/">Estudiantes</a>
-            <a href="/api/">API (DRF)</a>
-            <a href="/admin/">Admin</a>
-        </nav>
-    </header>
-
-    <div class="container">
-        <h2>Bienvenido al Sistema</h2>
-        <p>Selecciona una opción para ver la información registrada en la base de datos:</p>
-
-        <div class="cards-grid">
-            <div class="card">
-                <h3>📚 Cursos</h3>
-                <p>Ver la lista de cursos y sus profesores asignados.</p>
-                <a href="/cursos/" class="btn">Ver Cursos</a>
-            </div>
-            <div class="card">
-                <h3>👨‍🎓 Estudiantes</h3>
-                <p>Ver la lista de alumnos registrados en el sistema.</p>
-                <a href="/estudiantes/" class="btn">Ver Estudiantes</a>
-            </div>
-            <div class="card">
-                <h3>⚡ API REST</h3>
-                <p>Acceder a los endpoints creados con Django REST Framework.</p>
-                <a href="/api/" class="btn" style="background-color: #27ae60;">Ir a la API</a>
-            </div>
-        </div>
-    </div>
-
-</body>
-</html>
+<section class="catalog" id="catalogo">
+  <div class="section-title"><div><p class="eyebrow">FLOTA DISPONIBLE</p><h2>Encuentra el equipo correcto</h2></div></div>
+  <form class="filters" method="get">
+    <input type="search" name="q" value="{{ q }}" placeholder="Buscar maquinaria o categoría">
+    <select name="categoria"><option value="">Todas las categorías</option>{% for categoria in categorias %}<option value="{{ categoria }}" {% if categoria == categoria_activa %}selected{% endif %}>{{ categoria }}</option>{% endfor %}</select>
+    <button type="submit">Filtrar</button>
+  </form>
+  <div class="machine-grid">
+    {% for maquinaria in maquinarias %}
+    <article class="machine-card">
+      <div class="machine-image">{% if maquinaria.image_url %}<img src="{{ maquinaria.image_url }}" alt="{{ maquinaria.nombre }}" loading="lazy" onerror="this.parentElement.classList.add('image-error')"><div class="machine-placeholder image-fallback">⚙</div>{% else %}<div class="machine-placeholder">⚙</div>{% endif %}<span>{{ maquinaria.categoria }}</span></div>
+      <div class="machine-body"><h3>{{ maquinaria.nombre }}</h3><p>{{ maquinaria.descripcion|truncatechars:115 }}</p>
+        <div class="rates"><div><small>Tarifa diaria</small><strong>${{ maquinaria.tarifa_diaria }}</strong></div><div><small>Tarifa semanal</small><strong>${{ maquinaria.tarifa_semanal }}</strong></div></div>
+        <p class="fleet">{{ maquinaria.cantidad }} unidad{{ maquinaria.cantidad|pluralize:"es" }} en flota · Garantía ${{ maquinaria.garantia }}</p>
+        {% if request.user.is_authenticated and request.user.perfil.rol == 'EMPRESA_CONSTRUCTORA' %}
+        <form class="rent-form" method="post" action="{% url 'agregar_carro_web' maquinaria.id %}">{% csrf_token %}
+          <label>Unidades<input type="number" name="cantidad" value="1" min="1" max="{{ maquinaria.cantidad }}" required></label>
+          <button type="submit">Agregar al carro</button>
+        </form>
+        {% elif not request.user.is_authenticated %}<a class="card-link" href="{% url 'login' %}">Ingresa para arrendar →</a>{% endif %}
+      </div>
+    </article>
+    {% empty %}<div class="empty-state"><h3>No encontramos maquinaria</h3><p>Prueba otra búsqueda o categoría.</p></div>{% endfor %}
+  </div>
+</section>
+{% endblock %}

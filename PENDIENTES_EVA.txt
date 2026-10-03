@@ -1,0 +1,26 @@
+============================================================
+PENDIENTES EVA
+============================================================
+
+PRIORIDAD ALTA
+
+- Ningún pendiente funcional o de seguridad detectado en esta prioridad.
+
+PRIORIDAD MEDIA
+
+- Requisito: Checkout valida disponibilidad.
+  Problema: checkout valida carro y fechas, pero la disponibilidad se comprueba únicamente al pasar a PAGADO.
+  Archivo relacionado: api/services.py, crear_contrato y cambiar_estado_contrato.
+  Solución necesaria: si el evaluador exige doble control, añadir validación no reservante en checkout y conservar el bloqueo/revalidación atómica al pagar.
+
+PRIORIDAD BAJA
+
+- Requisito: Cobertura de pruebas.
+  Problema: los 14 tests pasan, pero no cubren de forma explícita refresh JWT, CRUD exitoso completo, DELETE API del carro ni transición inválida.
+  Archivo relacionado: api/tests.py.
+  Solución necesaria: agregar casos focalizados si se desea evidencia automatizada adicional para la defensa.
+
+- Requisito: Publicación en GitHub.
+  Problema: falta crear el commit inicial y configurar el remoto del repositorio nuevo.
+  Archivo relacionado: estado Git local.
+  Solución necesaria: revisar `git status`, crear el commit y asociar el nuevo repositorio. No se realizó push.
