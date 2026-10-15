@@ -1,11 +1,12 @@
 from datetime import date, timedelta
+from unittest.mock import Mock, patch
 
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from .models import CarroArriendo, Contrato, ItemCarro, Maquinaria, PerfilUsuario, UnidadFlota
+from .models import CarroArriendo, Contrato, ItemCarro, Maquinaria, PagoWebpay, PerfilUsuario, UnidadFlota
 from .services import cambiar_estado_contrato, crear_contrato
 
 
@@ -282,3 +283,94 @@ class WebTests(ArriendoBase):
         catalogo = self.client.get(reverse('home'))
         self.assertContains(catalogo, 'Consultar fechas')
         self.assertContains(catalogo, '0 sin reserva')
+
+
+class PagoWebpayTests(ArriendoBase):
+    def setUp(self):
+        super().setUp()
+        self.crear_carro()
+        self.contrato = crear_contrato(self.empresa)
+        self.cliente_webpay = Mock()
+        self.token = 'a' * 64
+        self.cliente_webpay.create.return_value = {
+            'token': self.token,
+            'url': 'https://webpay3gint.transbank.cl/webpayserver/initTransaction',
+        }
+
+    def iniciar_pago(self):
+        self.client.force_login(self.empresa)
+        with patch('api.client_views.obtener_transaccion_webpay', return_value=self.cliente_webpay):
+            return self.client.post(reverse('webpay_iniciar', args=(self.contrato.id,)))
+
+    def respuesta_commit(self, **cambios):
+        pago = PagoWebpay.objects.get(contrato=self.contrato)
+        respuesta = {
+            'amount': int(self.contrato.total),
+            'status': 'AUTHORIZED',
+            'buy_order': pago.buy_order,
+            'session_id': pago.session_id,
+            'card_detail': {'card_number': '6623'},
+            'authorization_code': '1213',
+            'payment_type_code': 'VN',
+            'response_code': 0,
+        }
+        respuesta.update(cambios)
+        return respuesta
+
+    def test_inicia_pago_en_webpay_y_muestra_tarjeta_de_prueba(self):
+        respuesta = self.iniciar_pago()
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, '4051 8856 0044 6623')
+        self.assertContains(respuesta, f'name="token_ws" value="{self.token}"')
+        pago = PagoWebpay.objects.get(contrato=self.contrato)
+        self.assertEqual(pago.estado, PagoWebpay.INICIADO)
+        self.cliente_webpay.create.assert_called_once()
+
+    def test_retorno_autorizado_paga_y_reserva_la_maquinaria(self):
+        self.iniciar_pago()
+        self.cliente_webpay.commit.return_value = self.respuesta_commit()
+
+        with patch('api.client_views.obtener_transaccion_webpay', return_value=self.cliente_webpay):
+            respuesta = self.client.get(reverse('webpay_retorno'), {'token_ws': self.token})
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, 'Reserva confirmada')
+        self.contrato.refresh_from_db()
+        pago = PagoWebpay.objects.get(contrato=self.contrato)
+        self.assertEqual(self.contrato.estado, Contrato.PAGADO)
+        self.assertEqual(pago.estado, PagoWebpay.AUTORIZADO)
+        self.assertEqual(pago.card_last4, '6623')
+        self.assertEqual(self.maquina.unidades_reservadas_activas, 1)
+
+    def test_retorno_rechazado_no_confirma_la_reserva(self):
+        self.iniciar_pago()
+        self.cliente_webpay.commit.return_value = self.respuesta_commit(
+            status='FAILED', response_code=-1, card_detail={'card_number': '0568'},
+        )
+
+        with patch('api.client_views.obtener_transaccion_webpay', return_value=self.cliente_webpay):
+            respuesta = self.client.get(reverse('webpay_retorno'), {'token_ws': self.token})
+
+        self.assertContains(respuesta, 'Pago no completado')
+        self.contrato.refresh_from_db()
+        self.assertEqual(self.contrato.estado, Contrato.PENDIENTE)
+        self.assertEqual(self.contrato.pago_webpay.estado, PagoWebpay.RECHAZADO)
+
+    def test_retorno_con_monto_distinto_se_rechaza(self):
+        self.iniciar_pago()
+        self.cliente_webpay.commit.return_value = self.respuesta_commit(amount=1)
+
+        with patch('api.client_views.obtener_transaccion_webpay', return_value=self.cliente_webpay):
+            self.client.get(reverse('webpay_retorno'), {'token_ws': self.token})
+
+        self.contrato.refresh_from_db()
+        self.assertEqual(self.contrato.estado, Contrato.PENDIENTE)
+        self.assertEqual(self.contrato.pago_webpay.estado, PagoWebpay.RECHAZADO)
+
+    def test_otro_usuario_no_puede_iniciar_el_pago(self):
+        otra = User.objects.create_user('otra_empresa_pago', password='Clave-segura-123')
+        self.client.force_login(otra)
+        respuesta = self.client.post(reverse('webpay_iniciar', args=(self.contrato.id,)))
+        self.assertEqual(respuesta.status_code, 404)
+        self.assertFalse(PagoWebpay.objects.exists())

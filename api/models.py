@@ -235,6 +235,51 @@ class Contrato(models.Model):
 
 
 # ==========================================================
+# PAGO WEBPAY PLUS
+# Conserva la orden y el resultado necesarios para validar el
+# retorno de Transbank sin guardar nunca el número de tarjeta.
+# ==========================================================
+class PagoWebpay(models.Model):
+    INICIADO = 'INICIADO'
+    AUTORIZADO = 'AUTORIZADO'
+    RECHAZADO = 'RECHAZADO'
+    ANULADO = 'ANULADO'
+    REEMBOLSADO = 'REEMBOLSADO'
+    ERROR = 'ERROR'
+    ESTADOS = [
+        (INICIADO, 'Iniciado'),
+        (AUTORIZADO, 'Autorizado'),
+        (RECHAZADO, 'Rechazado'),
+        (ANULADO, 'Anulado por el usuario'),
+        (REEMBOLSADO, 'Reembolsado'),
+        (ERROR, 'Error'),
+    ]
+
+    contrato = models.OneToOneField(Contrato, on_delete=models.PROTECT, related_name='pago_webpay')
+    buy_order = models.CharField(max_length=26, unique=True)
+    session_id = models.CharField(max_length=61)
+    monto = models.DecimalField(max_digits=14, decimal_places=0)
+    token = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    url_pago = models.URLField(max_length=500, blank=True)
+    estado = models.CharField(max_length=20, choices=ESTADOS, default=INICIADO, db_index=True)
+    response_code = models.IntegerField(null=True, blank=True)
+    authorization_code = models.CharField(max_length=20, blank=True)
+    payment_type_code = models.CharField(max_length=10, blank=True)
+    card_last4 = models.CharField(max_length=4, blank=True)
+    respuesta = models.JSONField(default=dict, blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ('-creado_en',)
+        verbose_name = 'pago Webpay'
+        verbose_name_plural = 'pagos Webpay'
+
+    def __str__(self):
+        return f'{self.buy_order} · {self.get_estado_display()}'
+
+
+# ==========================================================
 # HISTÓRICO DEL CONTRATO
 # Copia nombre, tarifas, garantía, período y subtotal para que
 # cambios posteriores en Maquinaria no alteren lo contratado.

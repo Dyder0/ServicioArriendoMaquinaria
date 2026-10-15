@@ -148,6 +148,13 @@ LOGIN_REDIRECT_URL = 'home'
 LOGOUT_REDIRECT_URL = 'home'
 
 
+# Webpay Plus. Por defecto se usan las credenciales públicas del ambiente de
+# integración; para producción ambas credenciales deben venir del entorno.
+WEBPAY_ENVIRONMENT = os.getenv('WEBPAY_ENVIRONMENT', 'integration').lower()
+WEBPAY_COMMERCE_CODE = os.getenv('WEBPAY_COMMERCE_CODE', '')
+WEBPAY_API_KEY = os.getenv('WEBPAY_API_KEY', '')
+
+
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 

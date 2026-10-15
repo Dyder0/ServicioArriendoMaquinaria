@@ -1,22 +1,32 @@
 import calendar
+import logging
+import uuid
 from datetime import date, timedelta
 from functools import wraps
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import Q, Sum
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods, require_POST
 
 from .forms import AgregarCarroForm, ItemCarroForm, MaquinariaForm, UnidadFlotaForm
 from .models import (
-    CarroArriendo, Contrato, ItemCarro, ItemContrato, Maquinaria, PerfilUsuario, UnidadFlota, fin_bloqueo,
+    CarroArriendo, Contrato, ItemCarro, ItemContrato, Maquinaria, PagoWebpay, PerfilUsuario, UnidadFlota,
+    fin_bloqueo,
 )
+from .payments import obtener_transaccion_webpay, respuesta_autorizada, respuesta_segura
 from .permissions import tiene_rol
 from .services import cambiar_estado_contrato, crear_contrato
+
+
+logger = logging.getLogger(__name__)
 
 
 # ==========================================================
@@ -179,8 +189,179 @@ def checkout_web(request):
 
 @rol_requerido(PerfilUsuario.EMPRESA)
 def mis_contratos_view(request):
-    contratos = Contrato.objects.filter(usuario=request.user).prefetch_related('items')
-    return render(request, 'contratos.html', {'contratos': contratos})
+    contratos = Contrato.objects.filter(usuario=request.user).select_related('pago_webpay').prefetch_related('items')
+    return render(request, 'contratos.html', {
+        'contratos': contratos,
+        'webpay_integracion': settings.WEBPAY_ENVIRONMENT == 'integration',
+    })
+
+
+# ==========================================================
+# PAGO WEBPAY PLUS
+# Inicia la transacción en Transbank y confirma el resultado
+# del retorno antes de cambiar el contrato a PAGADO.
+# ==========================================================
+@require_POST
+@rol_requerido(PerfilUsuario.EMPRESA)
+def webpay_iniciar_view(request, pk):
+    contrato = get_object_or_404(Contrato, pk=pk, usuario=request.user)
+    if contrato.estado != Contrato.PENDIENTE:
+        messages.error(request, 'Solo los contratos pendientes se pueden pagar.')
+        return redirect('mis_contratos_web')
+
+    pago = PagoWebpay.objects.filter(contrato=contrato).first()
+    if pago and pago.estado == PagoWebpay.INICIADO and pago.token and pago.url_pago:
+        return render(request, 'webpay_redirect.html', {
+            'pago': pago, 'webpay_integracion': settings.WEBPAY_ENVIRONMENT == 'integration',
+        })
+    if pago and pago.estado == PagoWebpay.ERROR and pago.token:
+        messages.error(request, 'El resultado del pago anterior requiere revisión antes de volver a intentar.')
+        return redirect('mis_contratos_web')
+
+    identificador = uuid.uuid4().hex[:12]
+    buy_order = f'MR-{contrato.id}-{identificador}'[:26]
+    session_id = f'contrato-{contrato.id}-usuario-{request.user.id}-{identificador}'[:61]
+    if pago:
+        pago.buy_order = buy_order
+        pago.session_id = session_id
+        pago.monto = contrato.total
+        pago.token = None
+        pago.url_pago = ''
+        pago.estado = PagoWebpay.INICIADO
+        pago.response_code = None
+        pago.authorization_code = ''
+        pago.payment_type_code = ''
+        pago.card_last4 = ''
+        pago.respuesta = {}
+        pago.save()
+    else:
+        pago = PagoWebpay.objects.create(
+            contrato=contrato,
+            buy_order=buy_order,
+            session_id=session_id,
+            monto=contrato.total,
+        )
+
+    try:
+        respuesta = obtener_transaccion_webpay().create(
+            pago.buy_order,
+            pago.session_id,
+            int(pago.monto),
+            request.build_absolute_uri(reverse('webpay_retorno')),
+        )
+        pago.token = respuesta['token']
+        pago.url_pago = respuesta['url']
+        pago.save(update_fields=('token', 'url_pago', 'actualizado_en'))
+    except Exception as error:  # El SDK encapsula errores HTTP y de validación en varias clases.
+        logger.exception('No fue posible iniciar Webpay para el contrato %s', contrato.id)
+        pago.estado = PagoWebpay.ERROR
+        pago.respuesta = {'error': str(error)[:500]}
+        pago.save(update_fields=('estado', 'respuesta', 'actualizado_en'))
+        messages.error(request, 'Webpay no está disponible en este momento. Intenta nuevamente.')
+        return redirect('mis_contratos_web')
+
+    return render(request, 'webpay_redirect.html', {
+        'pago': pago, 'webpay_integracion': settings.WEBPAY_ENVIRONMENT == 'integration',
+    })
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def webpay_retorno_view(request):
+    datos = request.POST if request.method == 'POST' else request.GET
+    token = datos.get('token_ws')
+
+    # Webpay retorna TBK_TOKEN, sin token_ws, cuando la persona aborta el flujo.
+    if not token:
+        token_abortado = datos.get('TBK_TOKEN')
+        pago = (
+            PagoWebpay.objects.filter(token=token_abortado).select_related('contrato').first()
+            if token_abortado else None
+        )
+        if pago and pago.estado == PagoWebpay.INICIADO:
+            pago.estado = PagoWebpay.ANULADO
+            pago.save(update_fields=('estado', 'actualizado_en'))
+        return render(request, 'webpay_resultado.html', {
+            'pago': pago,
+            'exito': False,
+            'detalle': 'El pago fue anulado antes de completarse.',
+        })
+
+    pago = PagoWebpay.objects.filter(token=token).select_related('contrato').first()
+    if not pago:
+        return render(request, 'webpay_resultado.html', {
+            'exito': False,
+            'detalle': 'No se encontró una solicitud de pago asociada a este retorno.',
+        }, status=400)
+    if pago.estado != PagoWebpay.INICIADO:
+        return render(request, 'webpay_resultado.html', {
+            'pago': pago,
+            'exito': pago.estado == PagoWebpay.AUTORIZADO,
+            'detalle': 'Este resultado de pago ya fue procesado.',
+        })
+
+    try:
+        cliente_webpay = obtener_transaccion_webpay()
+        respuesta = cliente_webpay.commit(token)
+    except Exception as error:
+        # Si el commit alcanzó a procesarse pero su respuesta se perdió, status
+        # evita crear luego una segunda transacción para el mismo contrato.
+        logger.exception('Falló commit de Webpay para la orden %s; se consultará su estado', pago.buy_order)
+        try:
+            respuesta = cliente_webpay.status(token)
+        except Exception:
+            logger.exception('Tampoco fue posible consultar el estado de %s', pago.buy_order)
+            pago.estado = PagoWebpay.ERROR
+            pago.respuesta = {'error': str(error)[:500]}
+            pago.save(update_fields=('estado', 'respuesta', 'actualizado_en'))
+            return render(request, 'webpay_resultado.html', {
+                'pago': pago,
+                'exito': False,
+                'detalle': 'No fue posible confirmar la respuesta de Webpay. El pago requiere revisión.',
+            }, status=502)
+
+    pago.respuesta = respuesta_segura(respuesta)
+    pago.response_code = respuesta.get('response_code')
+    pago.authorization_code = respuesta.get('authorization_code') or ''
+    pago.payment_type_code = respuesta.get('payment_type_code') or ''
+    tarjeta = respuesta.get('card_detail') or {}
+    pago.card_last4 = str(tarjeta.get('card_number') or '')[-4:]
+
+    if not respuesta_autorizada(respuesta, pago):
+        pago.estado = PagoWebpay.RECHAZADO
+        pago.save()
+        return render(request, 'webpay_resultado.html', {
+            'pago': pago,
+            'exito': False,
+            'detalle': 'La transacción fue rechazada o sus datos no coinciden con la reserva.',
+        })
+
+    try:
+        with transaction.atomic():
+            cambiar_estado_contrato(pago.contrato_id, Contrato.PAGADO)
+            pago.estado = PagoWebpay.AUTORIZADO
+            pago.save()
+    except (Contrato.DoesNotExist, ValueError) as error:
+        # Si la flota dejó de estar disponible durante el flujo externo, se
+        # revierte el cargo para no cobrar una reserva imposible de cumplir.
+        try:
+            cliente_webpay.refund(token, int(pago.monto))
+            pago.estado = PagoWebpay.REEMBOLSADO
+            detalle = f'El pago fue reembolsado porque no se pudo confirmar la reserva: {error}'
+        except Exception:
+            logger.exception('Pago autorizado sin reserva; además falló el reembolso de %s', pago.buy_order)
+            pago.estado = PagoWebpay.ERROR
+            detalle = 'El pago fue autorizado, pero la reserva requiere revisión manual.'
+        pago.save()
+        return render(request, 'webpay_resultado.html', {
+            'pago': pago, 'exito': False, 'detalle': detalle,
+        }, status=409)
+
+    return render(request, 'webpay_resultado.html', {
+        'pago': pago,
+        'exito': True,
+        'detalle': 'Pago autorizado. La maquinaria quedó reservada correctamente.',
+    })
 
 
 # ==========================================================

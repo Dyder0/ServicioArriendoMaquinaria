@@ -94,6 +94,26 @@ Swagger: `http://127.0.0.1:8000/api/docs/`
 python manage.py test
 ```
 
+## Pago simulado con Webpay Plus
+
+Los contratos pendientes incluyen el botón **Pagar reserva con Webpay**. La
+configuración predeterminada usa el ambiente de integración de Transbank, sin
+dinero real. Para probar un pago aprobado usa:
+
+- VISA `4051885600446623`, CVV `123` y cualquier vencimiento futuro.
+- En la autenticación bancaria: RUT `11.111.111-1` y clave `123`.
+
+El retorno de Webpay se valida por estado, código de respuesta, monto, orden de
+compra y sesión antes de marcar el contrato como `PAGADO` y reservar la flota.
+Ejecuta las migraciones antes de probarlo:
+
+```powershell
+python manage.py migrate
+```
+
+Para producción configura `WEBPAY_ENVIRONMENT=production`,
+`WEBPAY_COMMERCE_CODE` y `WEBPAY_API_KEY` con las credenciales del comercio.
+
 ## API principal
 
 - `GET /api/maquinarias/`

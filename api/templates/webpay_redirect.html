@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Redirigiendo a Webpay · MaquiRent{% endblock %}
+{% block content %}
+<section class="payment-card">
+  <p class="eyebrow">{% if webpay_integracion %}AMBIENTE DE INTEGRACIÓN{% else %}PAGO SEGURO{% endif %}</p>
+  <h1>Te estamos llevando a Webpay</h1>
+  {% if webpay_integracion %}
+  <p>Usa estos datos para realizar el primer pago simulado:</p>
+  <dl class="test-card-data">
+    <div><dt>Tarjeta VISA</dt><dd>4051 8856 0044 6623</dd></div>
+    <div><dt>CVV</dt><dd>123</dd></div>
+    <div><dt>Vencimiento</dt><dd>Cualquier fecha futura</dd></div>
+    <div><dt>Autenticación</dt><dd>RUT 11.111.111-1 · clave 123</dd></div>
+  </dl>
+  {% else %}<p>Continúa para completar el pago de tu reserva en Webpay.</p>{% endif %}
+  <form id="webpay-form" method="post" action="{{ pago.url_pago }}">
+    <input type="hidden" name="token_ws" value="{{ pago.token }}">
+    <button class="primary-button" type="submit">Continuar a Webpay</button>
+  </form>
+  <small>La redirección comenzará automáticamente.{% if webpay_integracion %} Esta tarjeta funciona solo en pruebas.{% endif %}</small>
+</section>
+{% endblock %}
+{% block scripts %}<script>setTimeout(() => document.querySelector('#webpay-form').submit(), 1200);</script>{% endblock %}

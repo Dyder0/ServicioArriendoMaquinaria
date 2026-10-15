@@ -5,3 +5,13 @@ env/
 .venv/
 staticfiles/
 db.sqlite3
+
+# Archivos locales
+__pycache__/
+*.pyc
+maquinarias.json
+*.dump
+.env
+env/
+.venv/
+staticfiles/
